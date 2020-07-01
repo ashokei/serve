@@ -34,6 +34,20 @@ class BaseHandler(abc.ABC):
         properties = ctx.system_properties
         model_dir = properties.get("model_dir")
         map_location = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if map_location == "cpu":
+            # check if intel_pytorch_extension installed
+            try:
+                import intel_pytorch_extension as ipex
+                map_location = ipex.DEVICE
+                # set optimal OMP affinity
+                lscpu = os.popen('lscpu').readlines()
+                per_core = [val.strip().split(" ")[-1] for val in cpuinfo if "per core" in val]
+                if len(per_core) > 0 and int(per_core[0]) == 1:
+                    os.environ["KMP_AFFINITY"] = "granularity=fine,verbose,compact"
+                else:
+                    os.environ["KMP_AFFINITY"] = "granularity=fine,verbose,compact,1,0"
+            except:
+                pass
         self.device = torch.device(map_location + ":" + str(properties.get(
             "gpu_id")) if torch.cuda.is_available() else map_location)
 
