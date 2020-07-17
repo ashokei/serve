@@ -41,7 +41,7 @@ class BaseHandler(abc.ABC):
                 map_location = ipex.DEVICE
                 # set optimal OMP affinity
                 lscpu = os.popen('lscpu').readlines()
-                per_core = [val.strip().split(" ")[-1] for val in cpuinfo if "per core" in val]
+                per_core = [val.strip().split(" ")[-1] for val in lscpu if "per core" in val]
                 if len(per_core) > 0 and int(per_core[0]) == 1:
                     os.environ["KMP_AFFINITY"] = "granularity=fine,verbose,compact"
                 else:
