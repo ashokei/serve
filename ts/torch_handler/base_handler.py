@@ -41,6 +41,9 @@ class BaseHandler(abc.ABC):
             try:
                 import intel_pytorch_extension as ipex
                 self.device = torch.device(ipex.DEVICE)
+                # enable bfloat16 mixed precision
+                if os.environ.get('IPEX_DISABLE_MIXED_PRECISION') is None:
+                    ipex.enable_auto_mix_precision()
                 # set optimal OMP affinity
                 lscpu = os.popen('lscpu').readlines()
                 per_core = [val.strip().split(" ")[-1] for val in lscpu if "per core" in val]
