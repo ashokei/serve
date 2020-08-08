@@ -10,10 +10,9 @@
 #       For reference: 
 #           https://docs.docker.com/develop/develop-images/build_enhancements/
 
-ARG BASE_IMAGE=ubuntu:18.04
+ARG BASE_IMAGE=ubuntu:20.04
 ARG BUILD_TYPE=dev
 ARG PYTHON_VERSION=3.8
-ARG WITH_TORCHVISION=1
 FROM ${BASE_IMAGE} AS compile-image
 
 ARG BASE_IMAGE
@@ -22,12 +21,6 @@ ARG MACHINE_TYPE=cpu
 ARG CUDA_VERSION=latest
 ARG JAVA_TOOL_OPTIONS=""
 ENV JAVA_TOOL_OPTIONS ${JAVA_TOOL_OPTIONS}
-
-ENV LD_PRELOAD "/opt/conda/lib/libiomp5.so /usr/lib/x86_64-linux-gnu/libjemalloc.so"
-ARG OMP_NUM_THREADS=""
-ENV OMP_NUM_THREADS ${OMP_NUM_THREADS}
-ENV KMP_BLOCKTIME 0
-ENV MALLOC_CONF "oversize_threshold:1,background_thread:true,metadata_thp:auto,dirty_decay_ms:-1,muzzy_decay_ms:-1"
 
 ENV PYTHONUNBUFFERED TRUE
 
@@ -53,21 +46,9 @@ RUN curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest
      chmod +x ~/miniconda.sh && \
      ~/miniconda.sh -b -p /opt/conda && \
      rm ~/miniconda.sh && \
-     /opt/conda/bin/conda install -y python=$PYTHON_VERSION numpy pyyaml scipy ipython mkl mkl-include ninja cython typing && \
+     /opt/conda/bin/conda install -y python=$PYTHON_VERSION numpy pyyaml scipy ipython mkl mkl-include ninja cython typing pybind11 && \
      /opt/conda/bin/conda clean -ya
 ENV PATH /opt/conda/bin:$PATH
-
-RUN git clone https://github.com/intel/intel-extension-for-pytorch \
-    && cd intel-extension-for-pytorch && git submodule sync && git submodule update --init --recursive \
-    && git clone https://github.com/pytorch/pytorch \
-    && cd pytorch && git checkout v1.5.0-rc3 && git submodule sync && git submodule update --init --recursive \
-    && git apply ../torch_patches/dpcpp-v1.5-rc3.patch \
-    && USE_MKLDNN=1 USE_CUDA=0 USE_CUDNN=0 CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" python setup.py install \
-    && pip install -v . \
-    && pip install lark-parser hypothesis \
-    && cd .. && python setup.py install
-
-RUN if [ "$WITH_TORCHVISION" = "1" ] ; then cd && git clone https://github.com/pytorch/vision.git && cd vision && pip install -v . ; else echo "building without torchvision" ; fi
 
 # Build Dev Image
 FROM compile-image AS dev-image
@@ -85,6 +66,24 @@ RUN if [ "$MACHINE_TYPE" = "gpu" ]; then export USE_CUDA=1; fi \
     && chown -R model-server /home/model-server \
     && cp docker/config.properties /home/model-server/config.properties \
     && mkdir /home/model-server/model-store && chown -R model-server /home/model-server/model-store
+
+RUN pip uninstall -y torch
+RUN git clone https://github.com/intel/intel-extension-for-pytorch \
+    && cd intel-extension-for-pytorch && git submodule sync && git submodule update --init --recursive \
+    && git clone https://github.com/pytorch/pytorch \
+    && cd pytorch && git checkout v1.5.0-rc3 && git submodule sync && git submodule update --init --recursive \
+    && git apply ../torch_patches/dpcpp-v1.5-rc3.patch \
+    && USE_MKLDNN=1 USE_CUDA=0 USE_CUDNN=0 CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" python setup.py install \
+    && pip install lark-parser hypothesis \
+    && cd .. && python setup.py install && rm -rf *
+
+ARG OMP_NUM_THREADS=1
+ENV OMP_NUM_THREADS ${OMP_NUM_THREADS}
+ENV KMP_BLOCKTIME 0
+ARG IPEX_AUTO_MP=""
+ENV IPEX_AUTO_MP ${IPEX_AUTO_MP}
+ENV MALLOC_CONF "oversize_threshold:1,background_thread:true,metadata_thp:auto,dirty_decay_ms:-1,muzzy_decay_ms:-1"
+ENV LD_PRELOAD "/opt/conda/lib/libiomp5.so /usr/lib/x86_64-linux-gnu/libjemalloc.so"
 
 EXPOSE 8080 8081
 USER model-server

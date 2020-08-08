@@ -37,9 +37,8 @@ class BaseHandler(abc.ABC):
             import intel_pytorch_extension as ipex
             self.device = torch.device(ipex.DEVICE)
             # enable auto optimization for mixed precision bfloat16 or int8
-            ipex_auto = os.environ.get('IPEX_AUTO_OPT')
-            if ipex_auto:
-                ipex.enable_auto_optimization(ipex_auto)
+            if os.environ.get('IPEX_AUTO_MP'):
+                ipex.enable_auto_mix_precision()
             # set optimal OMP affinity
             lscpu = os.popen('lscpu').readlines()
             per_core = [val.strip().split(" ")[-1] for val in lscpu if "per core" in val]
