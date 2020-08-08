@@ -33,6 +33,22 @@ class BaseHandler(abc.ABC):
         self.map_location = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(self.map_location + ":" + str(properties.get("gpu_id"))
                                    if torch.cuda.is_available() else self.map_location)
+        try:
+            import intel_pytorch_extension as ipex
+            self.device = torch.device(ipex.DEVICE)
+            # enable auto optimization for mixed precision bfloat16 or int8
+            ipex_auto = os.environ.get('IPEX_AUTO_OPT')
+            if ipex_auto:
+                ipex.enable_auto_optimization(ipex_auto)
+            # set optimal OMP affinity
+            lscpu = os.popen('lscpu').readlines()
+            per_core = [val.strip().split(" ")[-1] for val in lscpu if "per core" in val]
+            if len(per_core) > 0 and int(per_core[0]) == 1:
+                os.environ["KMP_AFFINITY"] = "granularity=fine,verbose,compact"
+            else:
+                os.environ["KMP_AFFINITY"] = "granularity=fine,verbose,compact,1,0"
+        except:
+            pass
         self.manifest = context.manifest
 
         model_dir = properties.get("model_dir")
