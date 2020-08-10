@@ -17,8 +17,6 @@ FROM ${BASE_IMAGE} AS compile-image
 
 ARG BASE_IMAGE
 ARG BRANCH_NAME=ipex_docker
-ARG MACHINE_TYPE=cpu
-ARG CUDA_VERSION=latest
 ARG JAVA_TOOL_OPTIONS=""
 ENV JAVA_TOOL_OPTIONS ${JAVA_TOOL_OPTIONS}
 
@@ -52,13 +50,10 @@ ENV PATH /opt/conda/bin:$PATH
 
 # Build Dev Image
 FROM compile-image AS dev-image
-ARG MACHINE_TYPE=cpu
-ARG CUDA_VERSION=latest
-RUN if [ "$MACHINE_TYPE" = "gpu" ]; then export USE_CUDA=1; fi \
-    && git clone https://github.com/ashokei/serve.git \
-    && cd serve \
-    && git checkout ${BRANCH_NAME} \
-    && ./scripts/install_from_src $CUDA_VERSION \
+RUN pip install lark-parser hypothesis transformers
+RUN git clone https://github.com/ashokei/serve.git \
+    && cd serve && git checkout ${BRANCH_NAME} \
+    && ./scripts/install_from_src \
     && useradd -m model-server \
     && mkdir -p /home/model-server/tmp \
     && cp docker/dockerd-entrypoint.sh /usr/local/bin/dockerd-entrypoint.sh \
@@ -67,19 +62,21 @@ RUN if [ "$MACHINE_TYPE" = "gpu" ]; then export USE_CUDA=1; fi \
     && cp docker/config.properties /home/model-server/config.properties \
     && mkdir /home/model-server/model-store && chown -R model-server /home/model-server/model-store
 
-RUN pip uninstall -y torch
+ARG TORCHVISION_VERSION=0.6
+RUN pip uninstall -y torch torchvision
+RUN pip install torchvision==${TORCHVISION_VERSION}+cpu --no-deps -f https://download.pytorch.org/whl/torch_stable.html
 RUN git clone https://github.com/intel/intel-extension-for-pytorch \
     && cd intel-extension-for-pytorch && git submodule sync && git submodule update --init --recursive \
     && git clone https://github.com/pytorch/pytorch \
     && cd pytorch && git checkout v1.5.0-rc3 && git submodule sync && git submodule update --init --recursive \
     && git apply ../torch_patches/dpcpp-v1.5-rc3.patch \
     && USE_MKLDNN=1 USE_CUDA=0 USE_CUDNN=0 CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" python setup.py install \
-    && pip install lark-parser hypothesis \
     && cd .. && python setup.py install && rm -rf *
 
 ARG OMP_NUM_THREADS=1
 ENV OMP_NUM_THREADS ${OMP_NUM_THREADS}
-ENV KMP_BLOCKTIME 0
+ARG KMP_BLOCKTIME=1
+ENV KMP_BLOCKTIME ${KMP_BLOCKTIME} 
 ARG IPEX_AUTO_MP=""
 ENV IPEX_AUTO_MP ${IPEX_AUTO_MP}
 ENV MALLOC_CONF "oversize_threshold:1,background_thread:true,metadata_thp:auto,dirty_decay_ms:-1,muzzy_decay_ms:-1"
