@@ -39,6 +39,20 @@ RUN curl -fsSL -v -o ~/miniconda.sh -O  https://repo.anaconda.com/miniconda/Mini
     rm ~/miniconda.sh && \
     /opt/conda/bin/conda install -y python=${PYTHON_VERSION} conda-build pyyaml numpy ipython mkl mkl-include ninja cython typing pybind11 Pillow && \
     /opt/conda/bin/conda clean -ya
+    
+FROM dev-base AS dev-image
+ARG BRANCH_NAME=ipex_docker
+ARG JAVA_TOOL_OPTIONS=""
+ENV JAVA_TOOL_OPTIONS ${JAVA_TOOL_OPTIONS}
+COPY --from=conda /opt/conda /opt/conda
+RUN pip install lark-parser hypothesis transformers
+RUN git clone https://github.com/ashokei/serve.git \
+    && cd serve && git checkout ${BRANCH_NAME} \
+    && ./scripts/install_from_src \
+    && cp docker/dockerd-entrypoint.sh /opt/conda/bin/dockerd-entrypoint.sh \
+    && cp docker/config.properties /opt/conda/config.properties.serve \
+    && chmod +x /opt/conda/bin/dockerd-entrypoint.sh \
+    && pip uninstall -y torch torchvision
 
 FROM dev-base AS build
 ARG IPEX_VERSION=v1.8.0
