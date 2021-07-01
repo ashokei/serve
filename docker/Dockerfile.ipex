@@ -46,7 +46,7 @@ ARG JAVA_TOOL_OPTIONS=""
 ENV JAVA_TOOL_OPTIONS ${JAVA_TOOL_OPTIONS}
 COPY --from=conda /opt/conda /opt/conda
 RUN pip install lark-parser hypothesis transformers
-RUN git clone https://github.com/ashokei/serve.git \
+RUN git clone https://github.com/pytorch/serve.git \
     && cd serve && git checkout ${BRANCH_NAME} \
     && ./scripts/install_from_src \
     && cp docker/dockerd-entrypoint.sh /opt/conda/bin/dockerd-entrypoint.sh \
